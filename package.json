@@ -1,0 +1,36 @@
+{
+	"name": "rigtoy",
+	"private": true,
+	"version": "0.0.1",
+	"keywords": [
+		"3d",
+		"graphics",
+		"compute",
+		"webgl",
+		"webgpu",
+		"webxr",
+		"shaders",
+		"three",
+		"minimal"
+	],
+	"author": "Thanh Hoang-Minh",
+	"homepage": "https://rigtoy.github.io",
+	"repository": "https://github.com/rigtoy/rigtoy.github.io",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"lint": "tsc",
+		"preview": "vite preview",
+		"format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,json,css,scss,md}\""
+	},
+	"devDependencies": {
+		"prettier": "^3.5.3",
+		"vite": "^6.3.5",
+		"@types/node": "^22.15.19",
+		"typescript": "^5.8.3"
+	},
+	"dependencies": {
+		"@webgpu/types": "^0.1.60"
+	}
+}
