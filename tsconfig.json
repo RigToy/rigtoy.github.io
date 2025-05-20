@@ -1,16 +1,22 @@
 {
-  "compilerOptions": {
-    "outDir": "dist",
-    "target": "esnext",
-    "module": "esnext",
-    "lib": ["esnext", "dom"],
-    "moduleResolution": "bundler",
-    "strict": true,
-    "pretty": true,
-    "noEmit": true,
-    "forceConsistentCasingInFileNames": true,
-    "paths": {
-      "four": ["./src"]
-    }
-  }
+	"compilerOptions": {
+		"outDir": "dist",
+		"target": "esnext",
+		"module": "esnext",
+		"lib": [
+			"esnext",
+			"dom"
+		],
+		"moduleResolution": "bundler",
+		"strict": true,
+		"pretty": true,
+		"noEmit": true,
+		"forceConsistentCasingInFileNames": true,
+		"baseUrl": "./",
+		"paths": {
+			"@/*": [
+				"./src/*"
+			]
+		}
+	}
 }

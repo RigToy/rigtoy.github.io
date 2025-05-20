@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>WebGL Physical Material</title>
+	<style>
+		body {
+			margin: 0;
+			overflow: hidden;
+		}
+
+		canvas {
+			display: block;
+			width: 100vw;
+			height: 100vh;
+		}
+	</style>
+</head>
+
+<body>
+	<canvas id="glCanvas"></canvas>
+
+	<script>
+		// Main WebGL setup
+		const canvas = document.getElementById('glCanvas');
+		const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+
+		if (!gl) {
+			alert('WebGL not supported in your browser');
+		}
+
+		// Set canvas size
+		function resizeCanvas() {
+			canvas.width = window.innerWidth * window.devicePixelRatio;
+			canvas.height = window.innerHeight * window.devicePixelRatio;
+			gl.viewport(0, 0, canvas.width, canvas.height);
+		}
+		window.addEventListener('resize', resizeCanvas);
+		resizeCanvas();
+
+		// Vertex shader source
+		const vertexShaderSource = `#version 300 es
+        in vec3 position;
+        in vec3 normal;
+        in vec2 uv;
+
+        uniform mat4 modelViewMatrix;
+        uniform mat4 projectionMatrix;
+        uniform mat3 normalMatrix;
+
+        out vec3 vNormal;
+        out vec3 vViewPosition;
+        out vec2 vUv;
+
+        void main() {
+            vUv = uv;
+            vNormal = normalize(normalMatrix * normal);
+
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            vViewPosition = -mvPosition.xyz;
+
+            gl_Position = projectionMatrix * mvPosition;
+        }`;
+
+		// Fragment shader source - simplified MeshPhysicalMaterial
+		const fragmentShaderSource = `#version 300 es
+        precision highp float;
+
+        uniform vec3 diffuse;
+        uniform vec3 emissive;
+        uniform vec3 specular;
+        uniform float roughness;
+        uniform float metalness;
+        uniform float clearcoat;
+        uniform float clearcoatRoughness;
+        uniform float ior;
+        uniform vec3 sheenColor;
+        uniform float sheenRoughness;
+        uniform float transmission;
+        uniform float thickness;
+        uniform vec3 attenuationColor;
+        uniform float attenuationDistance;
+
+        uniform vec3 lightDirection;
+        uniform vec3 lightColor;
+        uniform float lightIntensity;
+
+        uniform float envMapIntensity;
+        uniform samplerCube envMap;
+
+        in vec3 vNormal;
+        in vec3 vViewPosition;
+        in vec2 vUv;
+
+        out vec4 fragColor;
+
+        const float PI = 3.141592653589793;
+        const float RECIPROCAL_PI = 0.3183098861837907;
+
+        // GGX Distribution
+        float D_GGX(float NoH, float roughness) {
+            float a = roughness * roughness;
+            float a2 = a * a;
+            float NoH2 = NoH * NoH;
+            float denom = NoH2 * (a2 - 1.0) + 1.0;
+            return a2 / (PI * denom * denom);
+        }
+
+        // Smith Joint GGX Visibility
+        float V_SmithGGXCorrelated(float NoV, float NoL, float roughness) {
+            float a = roughness * roughness;
+            float GGXV = NoL * sqrt(NoV * NoV * (1.0 - a) + a);
+            float GGXL = NoV * sqrt(NoL * NoL * (1.0 - a) + a);
+            return 0.5 / (GGXV + GGXL);
+        }
+
+        // Fresnel Schlick approximation
+        vec3 F_Schlick(float VoH, vec3 F0) {
+            return F0 + (1.0 - F0) * pow(1.0 - VoH, 5.0);
+        }
+
+        // Diffuse BRDF
+        vec3 BRDF_Diffuse(vec3 diffuseColor, float roughness, float NoV, float NoL, float VoH) {
+            vec3 F = F_Schlick(VoH, vec3(0.04));
+            float FL = pow(1.0 - NoL, 5.0);
+            float FV = pow(1.0 - NoV, 5.0);
+            float Fd90 = 0.5 + 2.0 * VoH * VoH * roughness;
+            float Fd = mix(1.0, Fd90, FL) * mix(1.0, Fd90, FV);
+            return diffuseColor * RECIPROCAL_PI * Fd * (1.0 - F);
+        }
+
+        void main() {
+            // Normalize vectors
+            vec3 N = normalize(vNormal);
+            vec3 V = normalize(vViewPosition);
+            vec3 L = normalize(lightDirection);
+            vec3 H = normalize(V + L);
+
+            // Dot products
+            float NoL = clamp(dot(N, L), 0.0, 1.0);
+            float NoV = abs(dot(N, V)) + 1e-5;
+            float NoH = clamp(dot(N, H), 0.0, 1.0);
+            float VoH = clamp(dot(V, H), 0.0, 1.0);
+            float LoH = clamp(dot(L, H), 0.0, 1.0);
+
+            // Base reflectance at normal incidence
+            vec3 F0 = mix(vec3(0.04), diffuse, metalness);
+
+            // Fresnel term
+            vec3 F = F_Schlick(VoH, F0);
+
+            // Specular BRDF
+            float D = D_GGX(NoH, roughness);
+            float V_ = V_SmithGGXCorrelated(NoV, NoL, roughness);
+            vec3 specularBRDF = (F * D * V_) * NoL;
+
+            // Diffuse BRDF
+            vec3 diffuseBRDF = BRDF_Diffuse(diffuse, roughness, NoV, NoL, VoH) * (1.0 - metalness);
+
+            // Sheen
+            vec3 sheenBRDF = vec3(0.0);
+            if (sheenRoughness > 0.0) {
+                float Dsheen = D_GGX(NoH, sheenRoughness);
+                float Vsheen = V_SmithGGXCorrelated(NoV, NoL, sheenRoughness);
+                vec3 Fsheen = F_Schlick(VoH, sheenColor);
+                sheenBRDF = (Fsheen * Dsheen * Vsheen) * NoL;
+            }
+
+            // Clearcoat
+            vec3 clearcoatBRDF = vec3(0.0);
+            if (clearcoat > 0.0) {
+                float Dclearcoat = D_GGX(NoH, clearcoatRoughness);
+                float Vclearcoat = V_SmithGGXCorrelated(NoV, NoL, clearcoatRoughness);
+                vec3 Fclearcoat = F_Schlick(VoH, vec3(0.04));
+                clearcoatBRDF = (Fclearcoat * Dclearcoat * Vclearcoat) * NoL * 0.25 * clearcoat;
+            }
+
+            // Combine all BRDFs
+            vec3 radiance = lightColor * lightIntensity;
+            vec3 color = (diffuseBRDF + specularBRDF + sheenBRDF + clearcoatBRDF) * radiance * NoL;
+
+            // Add emissive
+            color += emissive;
+
+            // Environment map (simplified)
+            vec3 R = reflect(-V, N);
+            vec3 envColor = texture(envMap, R).rgb * envMapIntensity;
+            color += envColor * F * (1.0 - NoV);
+
+            // Transmission (simplified)
+            if (transmission > 0.0) {
+                vec3 refracted = refract(-V, N, 1.0 / ior);
+                vec3 transmissionColor = texture(envMap, refracted).rgb * diffuse;
+                float attenuation = exp(-thickness / attenuationDistance);
+                transmissionColor *= attenuationColor * attenuation;
+                color = mix(color, transmissionColor, transmission);
+            }
+
+            fragColor = vec4(color, 1.0);
+        }`;
+
+		// Compile shader function
+		function compileShader(gl, source, type) {
+			const shader = gl.createShader(type);
+			gl.shaderSource(shader, source);
+			gl.compileShader(shader);
+
+			if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+				console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
+				gl.deleteShader(shader);
+				return null;
+			}
+
+			return shader;
+		}
+
+		// Create shader program
+		const vertexShader = compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
+		const fragmentShader = compileShader(gl, fragmentShaderSource, gl.FRAGMENT_SHADER);
+
+		const shaderProgram = gl.createProgram();
+		gl.attachShader(shaderProgram, vertexShader);
+		gl.attachShader(shaderProgram, fragmentShader);
+		gl.linkProgram(shaderProgram);
+
+		if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+			console.error('Shader program linking error:', gl.getProgramInfoLog(shaderProgram));
+		}
+
+		// Get attribute and uniform locations
+		const attribLocations = {
+			position: gl.getAttribLocation(shaderProgram, 'position'),
+			normal: gl.getAttribLocation(shaderProgram, 'normal'),
+			uv: gl.getAttribLocation(shaderProgram, 'uv')
+		};
+
+		const uniformLocations = {
+			modelViewMatrix: gl.getUniformLocation(shaderProgram, 'modelViewMatrix'),
+			projectionMatrix: gl.getUniformLocation(shaderProgram, 'projectionMatrix'),
+			normalMatrix: gl.getUniformLocation(shaderProgram, 'normalMatrix'),
+			diffuse: gl.getUniformLocation(shaderProgram, 'diffuse'),
+			emissive: gl.getUniformLocation(shaderProgram, 'emissive'),
+			specular: gl.getUniformLocation(shaderProgram, 'specular'),
+			roughness: gl.getUniformLocation(shaderProgram, 'roughness'),
+			metalness: gl.getUniformLocation(shaderProgram, 'metalness'),
+			clearcoat: gl.getUniformLocation(shaderProgram, 'clearcoat'),
+			clearcoatRoughness: gl.getUniformLocation(shaderProgram, 'clearcoatRoughness'),
+			ior: gl.getUniformLocation(shaderProgram, 'ior'),
+			sheenColor: gl.getUniformLocation(shaderProgram, 'sheenColor'),
+			sheenRoughness: gl.getUniformLocation(shaderProgram, 'sheenRoughness'),
+			transmission: gl.getUniformLocation(shaderProgram, 'transmission'),
+			thickness: gl.getUniformLocation(shaderProgram, 'thickness'),
+			attenuationColor: gl.getUniformLocation(shaderProgram, 'attenuationColor'),
+			attenuationDistance: gl.getUniformLocation(shaderProgram, 'attenuationDistance'),
+			lightDirection: gl.getUniformLocation(shaderProgram, 'lightDirection'),
+			lightColor: gl.getUniformLocation(shaderProgram, 'lightColor'),
+			lightIntensity: gl.getUniformLocation(shaderProgram, 'lightIntensity'),
+			envMapIntensity: gl.getUniformLocation(shaderProgram, 'envMapIntensity'),
+			envMap: gl.getUniformLocation(shaderProgram, 'envMap')
+		};
+
+		// Create a simple cube geometry
+		function createCubeGeometry() {
+			// Positions, normals, and UVs for a cube
+			const positions = new Float32Array([
+				// Front face
+				-1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0,
+				// Back face
+				-1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0,
+				// Top face
+				-1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
+				// Bottom face
+				-1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0,
+				// Right face
+				1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0,
+				// Left face
+				-1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0
+			]);
+
+			const normals = new Float32Array([
+				// Front
+				0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+				// Back
+				0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0,
+				// Top
+				0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+				// Bottom
+				0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0,
+				// Right
+				1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+				// Left
+				-1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0
+			]);
+
+			const uvs = new Float32Array([
+				// Front
+				0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+				// Back
+				1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0,
+				// Top
+				0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0,
+				// Bottom
+				1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+				// Right
+				0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+				// Left
+				1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
+			]);
+
+			const indices = new Uint16Array([
+				0, 1, 2, 0, 2, 3,    // front
+				4, 5, 6, 4, 6, 7,    // back
+				8, 9, 10, 8, 10, 11,    // top
+				12, 13, 14, 12, 14, 15,   // bottom
+				16, 17, 18, 16, 18, 19,   // right
+				20, 21, 22, 20, 22, 23    // left
+			]);
+
+			return { positions, normals, uvs, indices };
+		}
+
+		// Create and bind buffers for the cube
+		const cubeGeometry = createCubeGeometry();
+
+		const positionBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, cubeGeometry.positions, gl.STATIC_DRAW);
+
+		const normalBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, cubeGeometry.normals, gl.STATIC_DRAW);
+
+		const uvBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, cubeGeometry.uvs, gl.STATIC_DRAW);
+
+		const indexBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeGeometry.indices, gl.STATIC_DRAW);
+
+		// Create a simple environment map (placeholder)
+		const envMapSize = 16;
+		const envMapData = new Uint8Array(envMapSize * envMapSize * envMapSize * 4);
+		for (let i = 0; i < envMapSize * envMapSize * envMapSize; i++) {
+			envMapData[i * 4] = 128;     // R
+			envMapData[i * 4 + 1] = 128; // G
+			envMapData[i * 4 + 2] = 255; // B
+			envMapData[i * 4 + 3] = 255; // A
+		}
+
+		const envMap = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_CUBE_MAP, envMap);
+
+		// Create each face of the cube map
+		const faceSize = envMapSize * envMapSize * 4;
+		for (let face = 0; face < 6; face++) {
+			const faceData = envMapData.slice(face * faceSize, (face + 1) * faceSize);
+			gl.texImage2D(
+				gl.TEXTURE_CUBE_MAP_POSITIVE_X + face,
+				0,
+				gl.RGBA,
+				envMapSize,
+				envMapSize,
+				0,
+				gl.RGBA,
+				gl.UNSIGNED_BYTE,
+				new Uint8Array(faceData)
+			);
+		}
+
+		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+		// Set up material properties (similar to MeshPhysicalMaterial)
+		const materialProperties = {
+			diffuse: [0.5, 0.5, 0.8],
+			emissive: [0.0, 0.0, 0.0],
+			specular: [0.5, 0.5, 0.5],
+			roughness: 0.5,
+			metalness: 0.5,
+			clearcoat: 0.0,
+			clearcoatRoughness: 0.1,
+			ior: 1.5,
+			sheenColor: [0.0, 0.0, 0.0],
+			sheenRoughness: 0.0,
+			transmission: 0.0,
+			thickness: 1.0,
+			attenuationColor: [1.0, 1.0, 1.0],
+			attenuationDistance: 0.0,
+			envMapIntensity: 1.0
+		};
+
+		// Lighting
+		const lightProperties = {
+			direction: [0.5, 1.0, 0.8],
+			color: [1.0, 1.0, 1.0],
+			intensity: 1.0
+		};
+
+		// Camera setup
+		const camera = {
+			fov: 60 * Math.PI / 180,
+			aspect: canvas.width / canvas.height,
+			near: 0.1,
+			far: 100.0,
+			position: [0, 0, 5],
+			target: [0, 0, 0],
+			up: [0, 1, 0]
+		};
+
+		// Model matrix
+		const modelMatrix = new Float32Array([
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 0,
+			0, 0, 0, 1
+		]);
+
+		// View matrix
+		function lookAt(eye, target, up) {
+			const z = normalize(subtractVectors(eye, target));
+			const x = normalize(cross(up, z));
+			const y = normalize(cross(z, x));
+
+			return new Float32Array([
+				x[0], y[0], z[0], 0,
+				x[1], y[1], z[1], 0,
+				x[2], y[2], z[2], 0,
+				-dot(x, eye), -dot(y, eye), -dot(z, eye), 1
+			]);
+		}
+
+		// Projection matrix
+		function perspective(fov, aspect, near, far) {
+			const f = 1.0 / Math.tan(fov / 2);
+			const nf = 1.0 / (near - far);
+
+			return new Float32Array([
+				f / aspect, 0, 0, 0,
+				0, f, 0, 0,
+				0, 0, (far + near) * nf, -1,
+				0, 0, 2 * far * near * nf, 0
+			]);
+		}
+
+		// Helper functions for matrix math
+		function subtractVectors(a, b) {
+			return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+		}
+
+		function normalize(v) {
+			const length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+			return [v[0] / length, v[1] / length, v[2] / length];
+		}
+
+		function cross(a, b) {
+			return [
+				a[1] * b[2] - a[2] * b[1],
+				a[2] * b[0] - a[0] * b[2],
+				a[0] * b[1] - a[1] * b[0]
+			];
+		}
+
+		function dot(a, b) {
+			return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+		}
+
+		function multiplyMatrices(a, b) {
+			const result = new Float32Array(16);
+
+			for (let i = 0; i < 4; i++) {
+				for (let j = 0; j < 4; j++) {
+					result[j * 4 + i] = 0;
+					for (let k = 0; k < 4; k++) {
+						result[j * 4 + i] += a[k * 4 + i] * b[j * 4 + k];
+					}
+				}
+			}
+
+			return result;
+		}
+
+		function transposeMatrix(m) {
+			return new Float32Array([
+				m[0], m[4], m[8], m[12],
+				m[1], m[5], m[9], m[13],
+				m[2], m[6], m[10], m[14],
+				m[3], m[7], m[11], m[15]
+			]);
+		}
+
+		function inverseMatrix(m) {
+			// This is a simplified inversion for 4x4 matrices
+			// For production code, use a more robust implementation
+			const inv = new Float32Array(16);
+
+			inv[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15] +
+				m[9] * m[7] * m[14] + m[13] * m[6] * m[11] - m[13] * m[7] * m[10];
+
+			inv[4] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15] -
+				m[8] * m[7] * m[14] - m[12] * m[6] * m[11] + m[12] * m[7] * m[10];
+
+			inv[8] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15] +
+				m[8] * m[7] * m[13] + m[12] * m[5] * m[11] - m[12] * m[7] * m[9];
+
+			inv[12] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14] -
+				m[8] * m[6] * m[13] - m[12] * m[5] * m[10] + m[12] * m[6] * m[9];
+
+			inv[1] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15] -
+				m[9] * m[3] * m[14] - m[13] * m[2] * m[11] + m[13] * m[3] * m[10];
+
+			inv[5] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15] +
+				m[8] * m[3] * m[14] + m[12] * m[2] * m[11] - m[12] * m[3] * m[10];
+
+			inv[9] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15] -
+				m[8] * m[3] * m[13] - m[12] * m[1] * m[11] + m[12] * m[3] * m[9];
+
+			inv[13] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14] +
+				m[8] * m[2] * m[13] + m[12] * m[1] * m[10] - m[12] * m[2] * m[9];
+
+			inv[2] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15] +
+				m[5] * m[3] * m[14] + m[13] * m[2] * m[7] - m[13] * m[3] * m[6];
+
+			inv[6] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15] -
+				m[4] * m[3] * m[14] - m[12] * m[2] * m[7] + m[12] * m[3] * m[6];
+
+			inv[10] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15] +
+				m[4] * m[3] * m[13] + m[12] * m[1] * m[7] - m[12] * m[3] * m[5];
+
+			inv[14] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14] -
+				m[4] * m[2] * m[13] - m[12] * m[1] * m[6] + m[12] * m[2] * m[5];
+
+			inv[3] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11] -
+				m[5] * m[3] * m[10] - m[9] * m[2] * m[7] + m[9] * m[3] * m[6];
+
+			inv[7] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11] +
+				m[4] * m[3] * m[10] + m[8] * m[2] * m[7] - m[8] * m[3] * m[6];
+
+			inv[11] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11] -
+				m[4] * m[3] * m[9] - m[8] * m[1] * m[7] + m[8] * m[3] * m[5];
+
+			inv[15] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10] +
+				m[4] * m[2] * m[9] + m[8] * m[1] * m[6] - m[8] * m[2] * m[5];
+
+			let det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+
+			if (det === 0) return m;
+
+			det = 1.0 / det;
+
+			for (let i = 0; i < 16; i++) {
+				inv[i] *= det;
+			}
+
+			return inv;
+		}
+
+		function normalMatrix(modelViewMatrix) {
+			const normal = new Float32Array(9);
+			const m = modelViewMatrix;
+
+			normal[0] = m[0];
+			normal[1] = m[1];
+			normal[2] = m[2];
+
+			normal[3] = m[4];
+			normal[4] = m[5];
+			normal[5] = m[6];
+
+			normal[6] = m[8];
+			normal[7] = m[9];
+			normal[8] = m[10];
+
+			// Invert and transpose
+			const det = normal[0] * (normal[4] * normal[8] - normal[5] * normal[7]) -
+				normal[1] * (normal[3] * normal[8] - normal[5] * normal[6]) +
+				normal[2] * (normal[3] * normal[7] - normal[4] * normal[6]);
+
+			if (det === 0) return normal;
+
+			const invDet = 1.0 / det;
+
+			const result = new Float32Array(9);
+
+			result[0] = (normal[4] * normal[8] - normal[5] * normal[7]) * invDet;
+			result[1] = (normal[2] * normal[7] - normal[1] * normal[8]) * invDet;
+			result[2] = (normal[1] * normal[5] - normal[2] * normal[4]) * invDet;
+
+			result[3] = (normal[5] * normal[6] - normal[3] * normal[8]) * invDet;
+			result[4] = (normal[0] * normal[8] - normal[2] * normal[6]) * invDet;
+			result[5] = (normal[2] * normal[3] - normal[0] * normal[5]) * invDet;
+
+			result[6] = (normal[3] * normal[7] - normal[4] * normal[6]) * invDet;
+			result[7] = (normal[1] * normal[6] - normal[0] * normal[7]) * invDet;
+			result[8] = (normal[0] * normal[4] - normal[1] * normal[3]) * invDet;
+
+			return result;
+		}
+
+		// Animation loop
+		function animate() {
+			requestAnimationFrame(animate);
+			render();
+		}
+
+		// Rotation variables
+		let rotationX = 0;
+		let rotationY = 0;
+
+		// Render function
+		function render() {
+			// Clear canvas
+			gl.clearColor(0.1, 0.1, 0.1, 1.0);
+			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+			gl.enable(gl.DEPTH_TEST);
+
+			// Update rotation
+			rotationX += 0.005;
+			rotationY += 0.007;
+
+			// Create model matrix with rotation
+			const cosX = Math.cos(rotationX);
+			const sinX = Math.sin(rotationX);
+			const cosY = Math.cos(rotationY);
+			const sinY = Math.sin(rotationY);
+
+			modelMatrix[0] = cosY;
+			modelMatrix[1] = sinX * sinY;
+			modelMatrix[2] = -cosX * sinY;
+
+			modelMatrix[4] = 0;
+			modelMatrix[5] = cosX;
+			modelMatrix[6] = sinX;
+
+			modelMatrix[8] = sinY;
+			modelMatrix[9] = -sinX * cosY;
+			modelMatrix[10] = cosX * cosY;
+
+			// Create view matrix
+			const viewMatrix = lookAt(camera.position, camera.target, camera.up);
+
+			// Create projection matrix
+			const projectionMatrix = perspective(camera.fov, camera.aspect, camera.near, camera.far);
+
+			// Create model-view matrix
+			const modelViewMatrix = multiplyMatrices(viewMatrix, modelMatrix);
+
+			// Create normal matrix
+			const normMatrix = normalMatrix(modelViewMatrix);
+
+			// Use shader program
+			gl.useProgram(shaderProgram);
+
+			// Set up attribute pointers
+			gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+			gl.vertexAttribPointer(attribLocations.position, 3, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(attribLocations.position);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+			gl.vertexAttribPointer(attribLocations.normal, 3, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(attribLocations.normal);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
+			gl.vertexAttribPointer(attribLocations.uv, 2, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(attribLocations.uv);
+
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+
+			// Set uniforms
+			gl.uniformMatrix4fv(uniformLocations.modelViewMatrix, false, modelViewMatrix);
+			gl.uniformMatrix4fv(uniformLocations.projectionMatrix, false, projectionMatrix);
+			gl.uniformMatrix3fv(uniformLocations.normalMatrix, false, normMatrix);
+
+			// Material properties
+			gl.uniform3fv(uniformLocations.diffuse, materialProperties.diffuse);
+			gl.uniform3fv(uniformLocations.emissive, materialProperties.emissive);
+			gl.uniform3fv(uniformLocations.specular, materialProperties.specular);
+			gl.uniform1f(uniformLocations.roughness, materialProperties.roughness);
+			gl.uniform1f(uniformLocations.metalness, materialProperties.metalness);
+			gl.uniform1f(uniformLocations.clearcoat, materialProperties.clearcoat);
+			gl.uniform1f(uniformLocations.clearcoatRoughness, materialProperties.clearcoatRoughness);
+			gl.uniform1f(uniformLocations.ior, materialProperties.ior);
+			gl.uniform3fv(uniformLocations.sheenColor, materialProperties.sheenColor);
+			gl.uniform1f(uniformLocations.sheenRoughness, materialProperties.sheenRoughness);
+			gl.uniform1f(uniformLocations.transmission, materialProperties.transmission);
+			gl.uniform1f(uniformLocations.thickness, materialProperties.thickness);
+			gl.uniform3fv(uniformLocations.attenuationColor, materialProperties.attenuationColor);
+			gl.uniform1f(uniformLocations.attenuationDistance, materialProperties.attenuationDistance);
+			gl.uniform1f(uniformLocations.envMapIntensity, materialProperties.envMapIntensity);
+
+			// Lighting
+			gl.uniform3fv(uniformLocations.lightDirection, lightProperties.direction);
+			gl.uniform3fv(uniformLocations.lightColor, lightProperties.color);
+			gl.uniform1f(uniformLocations.lightIntensity, lightProperties.intensity);
+
+			// Environment map
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_CUBE_MAP, envMap);
+			gl.uniform1i(uniformLocations.envMap, 0);
+
+			// Draw the cube
+			gl.drawElements(gl.TRIANGLES, cubeGeometry.indices.length, gl.UNSIGNED_SHORT, 0);
+		}
+
+		// Start animation
+		animate();
+	</script>
+</body>
+
+</html>

@@ -42,5 +42,3 @@ const material = new Material({
 const mesh = new Mesh(geometry, material)
 
 renderer.render(mesh, camera)
-
-console.log("object")
