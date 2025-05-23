@@ -2,6 +2,7 @@ import { resolve, dirname } from "path"
 import { fileURLToPath } from "url"
 import path from "path"
 import { defineConfig } from "vite"
+import glsl from 'vite-plugin-glsl'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -40,4 +41,5 @@ export default defineConfig({
 		exclude: [],
 	},
 	assetsInclude: ["**/*.wasm", "**/*.ktx2", "**/*.glb", "**/*.gltf", "**/*.png"],
+	plugins: [glsl()],
 })
