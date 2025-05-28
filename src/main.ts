@@ -1,5 +1,5 @@
-import vertexShaderSource from './shaders/vertex.glsl'
-import fragmentShaderSource from './shaders/fragment.glsl'
+import vertexShaderSource from './customshaders/vertex.glsl'
+import fragmentShaderSource from './customshaders/fragment.glsl'
 import { Geometry, Material, Mesh, PerspectiveCamera, WebGLRenderer } from "./core"
 
 
