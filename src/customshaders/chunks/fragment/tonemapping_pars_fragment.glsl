@@ -196,4 +196,3 @@ vec3 NeutralToneMapping( vec3 color ) {
 }
 
 vec3 CustomToneMapping( vec3 color ) { return color; }
-`

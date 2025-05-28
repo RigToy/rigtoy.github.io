@@ -559,4 +559,3 @@ float computeSpecularOcclusion( const in float dotNV, const in float ambientOccl
 	return saturate( pow( dotNV + ambientOcclusion, exp2( - 16.0 * roughness - 1.0 ) ) - 1.0 + ambientOcclusion );
 
 }
-`

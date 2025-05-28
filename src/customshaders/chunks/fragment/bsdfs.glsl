@@ -29,4 +29,3 @@ vec3 BRDF_BlinnPhong( const in vec3 lightDir, const in vec3 viewDir, const in ve
 
 } // validated
 
-`

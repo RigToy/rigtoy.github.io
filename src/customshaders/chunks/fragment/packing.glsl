@@ -86,7 +86,6 @@ float orthographicDepthToViewZ( const in float depth, const in float near, const
 }
 
 // NOTE: https://twitter.com/gonnavis/status/1377183786949959682
-
 float viewZToPerspectiveDepth( const in float viewZ, const in float near, const in float far ) {
 	// -near maps to 0; -far maps to 1
 	return ( ( near + viewZ ) * far ) / ( ( far - near ) * viewZ );
@@ -96,4 +95,3 @@ float perspectiveDepthToViewZ( const in float depth, const in float near, const 
 	// maps perspective depth in [ 0, 1 ] to viewZ
 	return ( near * far ) / ( ( far - near ) * depth - far );
 }
-`

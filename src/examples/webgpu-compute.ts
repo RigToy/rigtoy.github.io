@@ -10,8 +10,7 @@ const geometry = new Geometry({
 })
 
 const computeMaterial = new Material({
-	compute: /* wgsl */ `
-    @group(0) @binding(0)
+	compute: /* wgsl */     @group(0) @binding(0)
     var<storage, read_write> position: array<vec2<f32>>;
 
     @group(0) @binding(1)
@@ -33,8 +32,7 @@ mesh.material = new Material({
 	uniforms: {
 		time: 0,
 	},
-	vertex: /* wgsl */ `
-    struct VertexIn {
+	vertex: /* wgsl */     struct VertexIn {
       @location(0) position: vec3<f32>,
       @location(1) uv: vec2<f32>,
     };
@@ -52,8 +50,7 @@ mesh.material = new Material({
       return out;
     }
   `,
-	fragment: /* wgsl */ `
-    struct Uniforms {
+	fragment: /* wgsl */     struct Uniforms {
       time: f32,
     };
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;

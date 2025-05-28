@@ -50,8 +50,7 @@ const material = new Material({
 	uniforms: {
 		color: [1, 0.4, 0.7],
 	},
-	vertex: /* wgsl */ `
-    struct Uniforms {
+	vertex: /* wgsl */     struct Uniforms {
       projectionMatrix: mat4x4<f32>,
       modelViewMatrix: mat4x4<f32>,
       normalMatrix: mat4x4<f32>,
@@ -79,8 +78,7 @@ const material = new Material({
       return out;
     }
   `,
-	fragment: /* wgsl */ `
-    struct FragmentIn {
+	fragment: /* wgsl */     struct FragmentIn {
       @location(0) color: vec3<f32>,
       @location(1) normal: vec3<f32>,
     };

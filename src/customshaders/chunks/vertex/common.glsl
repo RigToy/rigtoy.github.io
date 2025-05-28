@@ -133,4 +133,3 @@ float F_Schlick( const in float f0, const in float f90, const in float dotVH ) {
 	return f0 * ( 1.0 - fresnel ) + ( f90 * fresnel );
 
 } // validated
-`

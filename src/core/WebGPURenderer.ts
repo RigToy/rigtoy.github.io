@@ -165,8 +165,7 @@ export class WebGPURenderer {
    */
   public autoClear = true
   /**
-   * Number of samples to use for MSAA rendering. Default is `4`
-   */
+   * Number of samples to use for MSAA rendering. Default is `4   */
   public samples = 4
 
   private _buffers = new Compiled<Attribute, GPUBuffer>()

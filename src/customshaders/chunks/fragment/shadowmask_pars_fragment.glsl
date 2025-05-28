@@ -62,4 +62,3 @@ float getShadowMask() {
 	return shadow;
 
 }
-`

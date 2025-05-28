@@ -13,8 +13,7 @@ const triangleGeometry = new Geometry({
 const compute = new Mesh(
 	triangleGeometry,
 	new Material({
-		vertex: /* wgsl */ `
-      struct VertexIn {
+		vertex: /* wgsl */       struct VertexIn {
         @location(0) position: vec3<f32>,
       };
 
@@ -29,8 +28,7 @@ const compute = new Mesh(
         return out;
       }
     `,
-		fragment: /* wgsl */ `
-      struct FragmentOut {
+		fragment: /* wgsl */       struct FragmentOut {
         @location(0) color0: vec4<f32>,
         @location(1) color1: vec4<f32>,
         @location(2) color2: vec4<f32>,
@@ -65,8 +63,7 @@ const composite = new Mesh(
 			texture2: renderTarget.textures[2],
 			texture3: renderTarget.textures[3],
 		},
-		vertex: /* wgsl */ `
-      struct VertexIn {
+		vertex: /* wgsl */       struct VertexIn {
         @location(0) position: vec3<f32>,
         @location(1) uv: vec2<f32>,
       };
@@ -84,8 +81,7 @@ const composite = new Mesh(
         return out;
       }
     `,
-		fragment: /* wgsl */ `
-      @group(0) @binding(0) var sampler0: sampler;
+		fragment: /* wgsl */       @group(0) @binding(0) var sampler0: sampler;
       @group(0) @binding(1) var texture0: texture_2d<f32>;
 
       @group(0) @binding(2) var sampler1: sampler;

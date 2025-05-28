@@ -3,12 +3,12 @@ import fragmentShaderSource from './customshaders/fragment.glsl'
 import { Geometry, Material, Mesh, PerspectiveCamera, WebGLRenderer } from "./core"
 
 class OpenHumanGL {
-	private renderer: WebGLRenderer;
-	private camera: PerspectiveCamera;
-	private mesh: Mesh;
-	private touching: boolean = false;
-	private prevTime: number = performance.now();
-	private angle: number = 0;
+	renderer: WebGLRenderer;
+	camera: PerspectiveCamera;
+	mesh: Mesh;
+	touching: boolean = false;
+	prevTime: number = performance.now();
+	angle: number = 0;
 
 	constructor() {
 		this.renderer = new WebGLRenderer();
@@ -27,7 +27,7 @@ class OpenHumanGL {
 		this.animate();
 	}
 
-	private createCubeGeometry(): Geometry {
+	createCubeGeometry(): Geometry {
 		const geometry = new Geometry({
 			position: {
 				size: 3,
@@ -64,7 +64,7 @@ class OpenHumanGL {
 		return geometry
 	}
 
-	private createCubeMaterial(): Material {
+	createCubeMaterial(): Material {
 		const material = new Material({
 			uniforms: {
 				color: [0.2, 0.4, 0.7],
@@ -75,7 +75,7 @@ class OpenHumanGL {
 		return material
 	}
 
-	private setupEventListeners(): void {
+	setupEventListeners(): void {
 		window.addEventListener('resize', () => {
 			this.renderer.setSize(window.innerWidth, window.innerHeight);
 			this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -85,7 +85,7 @@ class OpenHumanGL {
 		this.renderer.canvas.onpointerup = () => this.touching = false;
 	}
 
-	private animate(): void {
+	animate(): void {
 		const animateFrame = (time: DOMHighResTimeStamp) => {
 			requestAnimationFrame(animateFrame);
 

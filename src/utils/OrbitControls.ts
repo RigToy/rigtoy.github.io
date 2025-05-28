@@ -52,8 +52,7 @@ export class OrbitControls {
 		this._camera = camera
 		this._camera.lookAt(this.center)
 
-		// Ensure methods don't descope and re-inherit `this`
-		const properties = Object.getOwnPropertyNames(Object.getPrototypeOf(this))
+		// Ensure methods don't descope and re-inherit `this		const properties = Object.getOwnPropertyNames(Object.getPrototypeOf(this))
 		for (const property of properties) {
 			// @ts-ignore
 			if (typeof this[property] === 'function') this[property] = this[property].bind(this)

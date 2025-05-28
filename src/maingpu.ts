@@ -21,8 +21,7 @@ const geometry = new Geometry({
 	},
 })
 const material = new Material({
-	vertex: /* wgsl */ `
-    struct Uniforms {
+	vertex: /* wgsl */     struct Uniforms {
       projectionMatrix: mat4x4<f32>,
       modelViewMatrix: mat4x4<f32>,
     };
@@ -33,8 +32,7 @@ const material = new Material({
       return uniforms.projectionMatrix * uniforms.modelViewMatrix * vec4(position, 1);
     }
   `,
-	fragment: /* wgsl */ `
-    @fragment
+	fragment: /* wgsl */     @fragment
     fn main() -> @location(0) vec4<f32> {
       return vec4(1, 0, 0, 1);
     }

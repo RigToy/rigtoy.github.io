@@ -9,8 +9,7 @@ const material = new Material({
 		time: 0,
 		color: new Texture(new ImageData(new Uint8ClampedArray([76, 51, 128, 255]), 1, 1)),
 	},
-	vertex: /* wgsl */ `
-    struct Uniforms {
+	vertex: /* wgsl */     struct Uniforms {
       time: f32,
     };
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -30,8 +29,7 @@ const material = new Material({
       return out;
     }
   `,
-	fragment: /* wgsl */ `
-    @group(0) @binding(1) var sample: sampler;
+	fragment: /* wgsl */     @group(0) @binding(1) var sample: sampler;
     @group(0) @binding(2) var color: texture_2d<f32>;
 
     struct FragmentIn {
