@@ -2,7 +2,7 @@ import vertexShaderSource from './customshaders/vertex.glsl'
 import fragmentShaderSource from './customshaders/fragment.glsl'
 import { Geometry, Material, Mesh, PerspectiveCamera, WebGLRenderer } from "./core"
 
-class CubeScene {
+class OpenHumanGL {
 	private renderer: WebGLRenderer;
 	private camera: PerspectiveCamera;
 	private mesh: Mesh;
@@ -100,5 +100,5 @@ class CubeScene {
 	}
 }
 
-const cubeScene = new CubeScene();
+const cubeScene = new OpenHumanGL();
 
