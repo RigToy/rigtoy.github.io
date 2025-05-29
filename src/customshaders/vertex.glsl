@@ -696,40 +696,320 @@ void main() {
 #endif
 
 // ********************* #include <batching_vertex>
+#ifdef USE_BATCHING
+	mat4 batchingMatrix = getBatchingMatrix(getIndirectIndex(gl_DrawID));
+#endif
 
 // ********************* #include <beginnormal_vertex>
+	vec3 objectNormal = vec3(normal);
+
+#ifdef USE_TANGENT
+
+	vec3 objectTangent = vec3(tangent.xyz);
+
+#endif
 
 // ********************* #include <morphnormal_vertex>
+#ifdef USE_MORPHNORMALS
+
+	// morphTargetBaseInfluence is set based on BufferGeometry.morphTargetsRelative value:
+	// When morphTargetsRelative is false, this is set to 1 - sum(influences); this results in normal = sum((target - base) * influence)
+	// When morphTargetsRelative is true, this is set to 1; as a result, all morph targets are simply added to the base after weighting
+	objectNormal *= morphTargetBaseInfluence;
+
+	for(int i = 0; i < MORPHTARGETS_COUNT; i++) {
+
+		if(morphTargetInfluences[i] != 0.0f)
+			objectNormal += getMorph(gl_VertexID, i, 1).xyz * morphTargetInfluences[i];
+
+	}
+
+#endif
 
 // ********************* #include <skinbase_vertex>
+#ifdef USE_SKINNING
+
+	mat4 boneMatX = getBoneMatrix(skinIndex.x);
+	mat4 boneMatY = getBoneMatrix(skinIndex.y);
+	mat4 boneMatZ = getBoneMatrix(skinIndex.z);
+	mat4 boneMatW = getBoneMatrix(skinIndex.w);
+
+#endif
 
 // ********************* #include <skinnormal_vertex>
+#ifdef USE_SKINNING
+
+	mat4 skinMatrix = mat4(0.0f);
+	skinMatrix += skinWeight.x * boneMatX;
+	skinMatrix += skinWeight.y * boneMatY;
+	skinMatrix += skinWeight.z * boneMatZ;
+	skinMatrix += skinWeight.w * boneMatW;
+	skinMatrix = bindMatrixInverse * skinMatrix * bindMatrix;
+
+	objectNormal = vec4(skinMatrix * vec4(objectNormal, 0.0f)).xyz;
+
+	#ifdef USE_TANGENT
+
+	objectTangent = vec4(skinMatrix * vec4(objectTangent, 0.0f)).xyz;
+
+	#endif
+
+#endif
 
 // ********************* #include <defaultnormal_vertex>
 
+	vec3 transformedNormal = objectNormal;
+#ifdef USE_TANGENT
+
+	vec3 transformedTangent = objectTangent;
+
+#endif
+
+#ifdef USE_BATCHING
+
+	// this is in lieu of a per-instance normal-matrix
+	// shear transforms in the instance matrix are not supported
+
+	mat3 bm = mat3(batchingMatrix);
+	transformedNormal /= vec3(dot(bm[0], bm[0]), dot(bm[1], bm[1]), dot(bm[2], bm[2]));
+	transformedNormal = bm * transformedNormal;
+
+	#ifdef USE_TANGENT
+
+	transformedTangent = bm * transformedTangent;
+
+	#endif
+
+#endif
+
+#ifdef USE_INSTANCING
+
+	// this is in lieu of a per-instance normal-matrix
+	// shear transforms in the instance matrix are not supported
+
+	mat3 im = mat3(instanceMatrix);
+	transformedNormal /= vec3(dot(im[0], im[0]), dot(im[1], im[1]), dot(im[2], im[2]));
+	transformedNormal = im * transformedNormal;
+
+	#ifdef USE_TANGENT
+
+	transformedTangent = im * transformedTangent;
+
+	#endif
+
+#endif
+
+	transformedNormal = normalMatrix * transformedNormal;
+
+#ifdef FLIP_SIDED
+
+	transformedNormal = -transformedNormal;
+
+#endif
+
+#ifdef USE_TANGENT
+
+	transformedTangent = (modelViewMatrix * vec4(transformedTangent, 0.0f)).xyz;
+
+	#ifdef FLIP_SIDED
+
+	transformedTangent = -transformedTangent;
+
+	#endif
+
+#endif
+
 // ********************* #include <normal_vertex>
+#ifndef FLAT_SHADED // normal is computed with derivatives when FLAT_SHADED
+
+	vNormal = normalize(transformedNormal);
+
+	#ifdef USE_TANGENT
+
+	vTangent = normalize(transformedTangent);
+	vBitangent = normalize(cross(vNormal, vTangent) * tangent.w);
+
+	#endif
+
+#endif
 
 // ********************* #include <begin_vertex>
+	vec3 transformed = vec3(position);
+
+#ifdef USE_ALPHAHASH
+
+	vPosition = vec3(position);
+
+#endif
 
 // ********************* #include <morphtarget_vertex>
+#ifdef USE_MORPHTARGETS
+
+	// morphTargetBaseInfluence is set based on BufferGeometry.morphTargetsRelative value:
+	// When morphTargetsRelative is false, this is set to 1 - sum(influences); this results in position = sum((target - base) * influence)
+	// When morphTargetsRelative is true, this is set to 1; as a result, all morph targets are simply added to the base after weighting
+	transformed *= morphTargetBaseInfluence;
+
+	for(int i = 0; i < MORPHTARGETS_COUNT; i++) {
+
+		if(morphTargetInfluences[i] != 0.0f)
+			transformed += getMorph(gl_VertexID, i, 0).xyz * morphTargetInfluences[i];
+
+	}
+
+#endif
 
 // ********************* #include <skinning_vertex>
+#ifdef USE_SKINNING
+
+	vec4 skinVertex = bindMatrix * vec4(transformed, 1.0f);
+
+	vec4 skinned = vec4(0.0f);
+	skinned += boneMatX * skinVertex * skinWeight.x;
+	skinned += boneMatY * skinVertex * skinWeight.y;
+	skinned += boneMatZ * skinVertex * skinWeight.z;
+	skinned += boneMatW * skinVertex * skinWeight.w;
+
+	transformed = (bindMatrixInverse * skinned).xyz;
+
+#endif
 
 // ********************* #include <displacementmap_vertex>
+#ifdef USE_DISPLACEMENTMAP
+
+	transformed += normalize(objectNormal) * (texture2D(displacementMap, vDisplacementMapUv).x * displacementScale + displacementBias);
+
+#endif
 
 // ********************* #include <project_vertex>
+	vec4 mvPosition = vec4(transformed, 1.0f);
+
+#ifdef USE_BATCHING
+
+	mvPosition = batchingMatrix * mvPosition;
+
+#endif
+
+#ifdef USE_INSTANCING
+
+	mvPosition = instanceMatrix * mvPosition;
+
+#endif
+
+	mvPosition = modelViewMatrix * mvPosition;
+
+	gl_Position = projectionMatrix * mvPosition;
 
 // ********************* #include <logdepthbuf_vertex>
+#ifdef USE_LOGDEPTHBUF
+
+	vFragDepth = 1.0f + gl_Position.w;
+	vIsPerspective = float(isPerspectiveMatrix(projectionMatrix));
+
+#endif
 
 // ********************* #include <clipping_planes_vertex>
+#if NUM_CLIPPING_PLANES > 0
+
+	vClipPosition = -mvPosition.xyz;
+
+#endif
 
 	vViewPosition = -mvPosition.xyz;
 
 // ********************* #include <worldpos_vertex>
+#if defined( USE_ENVMAP ) || defined( DISTANCE ) || defined ( USE_SHADOWMAP ) || defined ( USE_TRANSMISSION ) || NUM_SPOT_LIGHT_COORDS > 0
+
+	vec4 worldPosition = vec4(transformed, 1.0f);
+
+	#ifdef USE_BATCHING
+
+	worldPosition = batchingMatrix * worldPosition;
+
+	#endif
+
+	#ifdef USE_INSTANCING
+
+	worldPosition = instanceMatrix * worldPosition;
+
+	#endif
+
+	worldPosition = modelMatrix * worldPosition;
+
+#endif
 
 // ********************* #include <shadowmap_vertex>
 
+#if ( defined( USE_SHADOWMAP ) && ( NUM_DIR_LIGHT_SHADOWS > 0 || NUM_POINT_LIGHT_SHADOWS > 0 ) ) || ( NUM_SPOT_LIGHT_COORDS > 0 )
+
+	// Offsetting the position used for querying occlusion along the world normal can be used to reduce shadow acne.
+	vec3 shadowWorldNormal = inverseTransformDirection(transformedNormal, viewMatrix);
+	vec4 shadowWorldPosition;
+
+#endif
+
+#if defined( USE_SHADOWMAP )
+
+	#if NUM_DIR_LIGHT_SHADOWS > 0
+
+		#pragma unroll_loop_start
+	for(int i = 0; i < NUM_DIR_LIGHT_SHADOWS; i++) {
+
+		shadowWorldPosition = worldPosition + vec4(shadowWorldNormal * directionalLightShadows[i].shadowNormalBias, 0);
+		vDirectionalShadowCoord[i] = directionalShadowMatrix[i] * shadowWorldPosition;
+
+	}
+		#pragma unroll_loop_end
+
+	#endif
+
+	#if NUM_POINT_LIGHT_SHADOWS > 0
+
+		#pragma unroll_loop_start
+	for(int i = 0; i < NUM_POINT_LIGHT_SHADOWS; i++) {
+
+		shadowWorldPosition = worldPosition + vec4(shadowWorldNormal * pointLightShadows[i].shadowNormalBias, 0);
+		vPointShadowCoord[i] = pointShadowMatrix[i] * shadowWorldPosition;
+
+	}
+		#pragma unroll_loop_end
+
+	#endif
+
+	/*
+	#if NUM_RECT_AREA_LIGHTS > 0
+
+		// TODO (abelnation): update vAreaShadowCoord with area light info
+
+	#endif
+	*/
+
+#endif
+
+// spot lights can be evaluated without active shadow mapping (when SpotLight.map is used)
+
+#if NUM_SPOT_LIGHT_COORDS > 0
+
+	#pragma unroll_loop_start
+	for(int i = 0; i < NUM_SPOT_LIGHT_COORDS; i++) {
+
+		shadowWorldPosition = worldPosition;
+		#if ( defined( USE_SHADOWMAP ) && UNROLLED_LOOP_INDEX < NUM_SPOT_LIGHT_SHADOWS )
+		shadowWorldPosition.xyz += shadowWorldNormal * spotLightShadows[i].shadowNormalBias;
+		#endif
+		vSpotLightCoord[i] = spotLightMatrix[i] * shadowWorldPosition;
+
+	}
+	#pragma unroll_loop_end
+
+#endif
+
 // ********************* #include <fog_vertex>
+#ifdef USE_FOG
+
+	vFogDepth = -mvPosition.z;
+
+#endif
 
 #ifdef USE_TRANSMISSION
 
