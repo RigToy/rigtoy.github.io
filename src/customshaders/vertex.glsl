@@ -351,82 +351,78 @@ varying vec3 vColor;
 // ********************* #include <fog_pars_vertex>
 #ifdef USE_FOG
 
-	varying float vFogDepth;
+varying float vFogDepth;
 
 #endif
 
 // ********************* #include <normal_pars_vertex>
 #ifndef FLAT_SHADED
 
-	varying vec3 vNormal;
+varying vec3 vNormal;
 
 	#ifdef USE_TANGENT
 
-		varying vec3 vTangent;
-		varying vec3 vBitangent;
+varying vec3 vTangent;
+varying vec3 vBitangent;
 
 	#endif
 
 #endif
-
 
 // ********************* #include <morphtarget_pars_vertex>
 #ifdef USE_MORPHTARGETS
 
 	#ifndef USE_INSTANCING_MORPH
 
-		uniform float morphTargetBaseInfluence;
-		uniform float morphTargetInfluences[ MORPHTARGETS_COUNT ];
+uniform float morphTargetBaseInfluence;
+uniform float morphTargetInfluences[MORPHTARGETS_COUNT];
 
 	#endif
 
-	uniform sampler2DArray morphTargetsTexture;
-	uniform ivec2 morphTargetsTextureSize;
+uniform sampler2DArray morphTargetsTexture;
+uniform ivec2 morphTargetsTextureSize;
 
-	vec4 getMorph( const in int vertexIndex, const in int morphTargetIndex, const in int offset ) {
+vec4 getMorph(const in int vertexIndex, const in int morphTargetIndex, const in int offset) {
 
-		int texelIndex = vertexIndex * MORPHTARGETS_TEXTURE_STRIDE + offset;
-		int y = texelIndex / morphTargetsTextureSize.x;
-		int x = texelIndex - y * morphTargetsTextureSize.x;
+	int texelIndex = vertexIndex * MORPHTARGETS_TEXTURE_STRIDE + offset;
+	int y = texelIndex / morphTargetsTextureSize.x;
+	int x = texelIndex - y * morphTargetsTextureSize.x;
 
-		ivec3 morphUV = ivec3( x, y, morphTargetIndex );
-		return texelFetch( morphTargetsTexture, morphUV, 0 );
+	ivec3 morphUV = ivec3(x, y, morphTargetIndex);
+	return texelFetch(morphTargetsTexture, morphUV, 0);
 
-	}
+}
 
 #endif
 
 // ********************* #include <skinning_pars_vertex>
 #ifdef USE_SKINNING
+uniform mat4 bindMatrix;
+uniform mat4 bindMatrixInverse;
 
-	uniform mat4 bindMatrix;
-	uniform mat4 bindMatrixInverse;
+uniform highp sampler2D boneTexture;
 
-	uniform highp sampler2D boneTexture;
+mat4 getBoneMatrix(const in float i) {
 
-	mat4 getBoneMatrix( const in float i ) {
+	int size = textureSize(boneTexture, 0).x;
+	int j = int(i) * 4;
+	int x = j % size;
+	int y = j / size;
+	vec4 v1 = texelFetch(boneTexture, ivec2(x, y), 0);
+	vec4 v2 = texelFetch(boneTexture, ivec2(x + 1, y), 0);
+	vec4 v3 = texelFetch(boneTexture, ivec2(x + 2, y), 0);
+	vec4 v4 = texelFetch(boneTexture, ivec2(x + 3, y), 0);
 
-		int size = textureSize( boneTexture, 0 ).x;
-		int j = int( i ) * 4;
-		int x = j % size;
-		int y = j / size;
-		vec4 v1 = texelFetch( boneTexture, ivec2( x, y ), 0 );
-		vec4 v2 = texelFetch( boneTexture, ivec2( x + 1, y ), 0 );
-		vec4 v3 = texelFetch( boneTexture, ivec2( x + 2, y ), 0 );
-		vec4 v4 = texelFetch( boneTexture, ivec2( x + 3, y ), 0 );
+	return mat4(v1, v2, v3, v4);
 
-		return mat4( v1, v2, v3, v4 );
-
-	}
-
+}
 #endif
-
 
 // ********************* #include <shadowmap_pars_vertex>
 #if NUM_SPOT_LIGHT_COORDS > 0
 
-	uniform mat4 spotLightMatrix[ NUM_SPOT_LIGHT_COORDS ];
-	varying vec4 vSpotLightCoord[ NUM_SPOT_LIGHT_COORDS ];
+uniform mat4 spotLightMatrix[NUM_SPOT_LIGHT_COORDS];
+varying vec4 vSpotLightCoord[NUM_SPOT_LIGHT_COORDS];
 
 #endif
 
@@ -434,51 +430,51 @@ varying vec3 vColor;
 
 	#if NUM_DIR_LIGHT_SHADOWS > 0
 
-		uniform mat4 directionalShadowMatrix[ NUM_DIR_LIGHT_SHADOWS ];
-		varying vec4 vDirectionalShadowCoord[ NUM_DIR_LIGHT_SHADOWS ];
+uniform mat4 directionalShadowMatrix[NUM_DIR_LIGHT_SHADOWS];
+varying vec4 vDirectionalShadowCoord[NUM_DIR_LIGHT_SHADOWS];
 
-		struct DirectionalLightShadow {
-			float shadowIntensity;
-			float shadowBias;
-			float shadowNormalBias;
-			float shadowRadius;
-			vec2 shadowMapSize;
-		};
+struct DirectionalLightShadow {
+	float shadowIntensity;
+	float shadowBias;
+	float shadowNormalBias;
+	float shadowRadius;
+	vec2 shadowMapSize;
+};
 
-		uniform DirectionalLightShadow directionalLightShadows[ NUM_DIR_LIGHT_SHADOWS ];
+uniform DirectionalLightShadow directionalLightShadows[NUM_DIR_LIGHT_SHADOWS];
 
 	#endif
 
 	#if NUM_SPOT_LIGHT_SHADOWS > 0
 
-		struct SpotLightShadow {
-			float shadowIntensity;
-			float shadowBias;
-			float shadowNormalBias;
-			float shadowRadius;
-			vec2 shadowMapSize;
-		};
+struct SpotLightShadow {
+	float shadowIntensity;
+	float shadowBias;
+	float shadowNormalBias;
+	float shadowRadius;
+	vec2 shadowMapSize;
+};
 
-		uniform SpotLightShadow spotLightShadows[ NUM_SPOT_LIGHT_SHADOWS ];
+uniform SpotLightShadow spotLightShadows[NUM_SPOT_LIGHT_SHADOWS];
 
 	#endif
 
 	#if NUM_POINT_LIGHT_SHADOWS > 0
 
-		uniform mat4 pointShadowMatrix[ NUM_POINT_LIGHT_SHADOWS ];
-		varying vec4 vPointShadowCoord[ NUM_POINT_LIGHT_SHADOWS ];
+uniform mat4 pointShadowMatrix[NUM_POINT_LIGHT_SHADOWS];
+varying vec4 vPointShadowCoord[NUM_POINT_LIGHT_SHADOWS];
 
-		struct PointLightShadow {
-			float shadowIntensity;
-			float shadowBias;
-			float shadowNormalBias;
-			float shadowRadius;
-			vec2 shadowMapSize;
-			float shadowCameraNear;
-			float shadowCameraFar;
-		};
+struct PointLightShadow {
+	float shadowIntensity;
+	float shadowBias;
+	float shadowNormalBias;
+	float shadowRadius;
+	vec2 shadowMapSize;
+	float shadowCameraNear;
+	float shadowCameraFar;
+};
 
-		uniform PointLightShadow pointLightShadows[ NUM_POINT_LIGHT_SHADOWS ];
+uniform PointLightShadow pointLightShadows[NUM_POINT_LIGHT_SHADOWS];
 
 	#endif
 
@@ -495,28 +491,209 @@ varying vec3 vColor;
 // ********************* #include <logdepthbuf_pars_vertex>
 #ifdef USE_LOGDEPTHBUF
 
-	varying float vFragDepth;
-	varying float vIsPerspective;
+varying float vFragDepth;
+varying float vIsPerspective;
 
 #endif
 
 // ********************* #include <clipping_planes_pars_vertex>
 #if NUM_CLIPPING_PLANES > 0
-
-	varying vec3 vClipPosition;
-
+varying vec3 vClipPosition;
 #endif
-
 
 void main() {
 
 // ********************* #include <uv_vertex>
+#if defined( USE_UV ) || defined( USE_ANISOTROPY )
+
+	vUv = vec3(uv, 1).xy;
+
+#endif
+#ifdef USE_MAP
+
+	vMapUv = (mapTransform * vec3(MAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_ALPHAMAP
+
+	vAlphaMapUv = (alphaMapTransform * vec3(ALPHAMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_LIGHTMAP
+
+	vLightMapUv = (lightMapTransform * vec3(LIGHTMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_AOMAP
+
+	vAoMapUv = (aoMapTransform * vec3(AOMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_BUMPMAP
+
+	vBumpMapUv = (bumpMapTransform * vec3(BUMPMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_NORMALMAP
+
+	vNormalMapUv = (normalMapTransform * vec3(NORMALMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_DISPLACEMENTMAP
+
+	vDisplacementMapUv = (displacementMapTransform * vec3(DISPLACEMENTMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_EMISSIVEMAP
+
+	vEmissiveMapUv = (emissiveMapTransform * vec3(EMISSIVEMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_METALNESSMAP
+
+	vMetalnessMapUv = (metalnessMapTransform * vec3(METALNESSMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_ROUGHNESSMAP
+
+	vRoughnessMapUv = (roughnessMapTransform * vec3(ROUGHNESSMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_ANISOTROPYMAP
+
+	vAnisotropyMapUv = (anisotropyMapTransform * vec3(ANISOTROPYMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_CLEARCOATMAP
+
+	vClearcoatMapUv = (clearcoatMapTransform * vec3(CLEARCOATMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_CLEARCOAT_NORMALMAP
+
+	vClearcoatNormalMapUv = (clearcoatNormalMapTransform * vec3(CLEARCOAT_NORMALMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_CLEARCOAT_ROUGHNESSMAP
+
+	vClearcoatRoughnessMapUv = (clearcoatRoughnessMapTransform * vec3(CLEARCOAT_ROUGHNESSMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_IRIDESCENCEMAP
+
+	vIridescenceMapUv = (iridescenceMapTransform * vec3(IRIDESCENCEMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_IRIDESCENCE_THICKNESSMAP
+
+	vIridescenceThicknessMapUv = (iridescenceThicknessMapTransform * vec3(IRIDESCENCE_THICKNESSMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_SHEEN_COLORMAP
+
+	vSheenColorMapUv = (sheenColorMapTransform * vec3(SHEEN_COLORMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_SHEEN_ROUGHNESSMAP
+
+	vSheenRoughnessMapUv = (sheenRoughnessMapTransform * vec3(SHEEN_ROUGHNESSMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_SPECULARMAP
+
+	vSpecularMapUv = (specularMapTransform * vec3(SPECULARMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_SPECULAR_COLORMAP
+
+	vSpecularColorMapUv = (specularColorMapTransform * vec3(SPECULAR_COLORMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_SPECULAR_INTENSITYMAP
+
+	vSpecularIntensityMapUv = (specularIntensityMapTransform * vec3(SPECULAR_INTENSITYMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_TRANSMISSIONMAP
+
+	vTransmissionMapUv = (transmissionMapTransform * vec3(TRANSMISSIONMAP_UV, 1)).xy;
+
+#endif
+#ifdef USE_THICKNESSMAP
+
+	vThicknessMapUv = (thicknessMapTransform * vec3(THICKNESSMAP_UV, 1)).xy;
+
+#endif
 
 // ********************* #include <color_vertex>
+#if defined( USE_COLOR_ALPHA )
+
+	vColor = vec4(1.0f);
+
+#elif defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR ) || defined( USE_BATCHING_COLOR )
+
+	vColor = vec3(1.0f);
+
+#endif
+
+#ifdef USE_COLOR
+
+	vColor *= color;
+
+#endif
+
+#ifdef USE_INSTANCING_COLOR
+
+	vColor.xyz *= instanceColor.xyz;
+
+#endif
+
+#ifdef USE_BATCHING_COLOR
+
+	vec3 batchingColor = getBatchingColor(getIndirectIndex(gl_DrawID));
+
+	vColor.xyz *= batchingColor.xyz;
+
+#endif
 
 // ********************* #include <morphinstance_vertex>
+#ifdef USE_INSTANCING_MORPH
+
+	float morphTargetInfluences[MORPHTARGETS_COUNT];
+
+	float morphTargetBaseInfluence = texelFetch(morphTexture, ivec2(0, gl_InstanceID), 0).r;
+
+	for(int i = 0; i < MORPHTARGETS_COUNT; i++) {
+
+		morphTargetInfluences[i] = texelFetch(morphTexture, ivec2(i + 1, gl_InstanceID), 0).r;
+
+	}
+#endif
 
 // ********************* #include <morphcolor_vertex>
+#if defined( USE_MORPHCOLORS )
+
+	// morphTargetBaseInfluence is set based on BufferGeometry.morphTargetsRelative value:
+	// When morphTargetsRelative is false, this is set to 1 - sum(influences); this results in normal = sum((target - base) * influence)
+	// When morphTargetsRelative is true, this is set to 1; as a result, all morph targets are simply added to the base after weighting
+	vColor *= morphTargetBaseInfluence;
+
+	for(int i = 0; i < MORPHTARGETS_COUNT; i++) {
+
+		#if defined( USE_COLOR_ALPHA )
+
+		if(morphTargetInfluences[i] != 0.0f)
+			vColor += getMorph(gl_VertexID, i, 2) * morphTargetInfluences[i];
+
+		#elif defined( USE_COLOR )
+
+		if(morphTargetInfluences[i] != 0.0f)
+			vColor += getMorph(gl_VertexID, i, 2).rgb * morphTargetInfluences[i];
+
+		#endif
+
+	}
+#endif
 
 // ********************* #include <batching_vertex>
 
