@@ -478,10 +478,11 @@ export class WebGLRenderer {
 
 			for (const shader of [vertexShader, fragmentShader]) {
 				const error = this.gl.getShaderInfoLog(shader)
-				if (error) throw `${error}\n${this.gl.getShaderSource(shader)!}			}
+				if (error) throw `${error}\n${this.gl.getShaderSource(shader)!}`
+			}
 
 			const error = this.gl.getProgramInfoLog(program)
-			if (error) throw `${this.gl.getProgramInfoLog(program)}
+			if (error) throw `${this.gl.getProgramInfoLog(program)}`
 			this.gl.deleteShader(vertexShader)
 			this.gl.deleteShader(fragmentShader)
 		}

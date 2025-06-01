@@ -1,336 +1,233 @@
 import vertexShader from "./vert.glsl"
 import fragmentShader from "./frag.glsl"
 
-class WebGLRenderEngine {
-  constructor(canvasId = "scene") {
-    this.canvas = document.getElementById(canvasId)
-    this.gl = this.canvas.getContext("webgl")
-    if (!this.gl) throw new Error("WebGL not supported")
+class WebGLCube {
+	constructor(canvasId = "scene") {
+		this.canvas = document.getElementById(canvasId)
+		this.gl = this.canvas.getContext("webgl")
+		if (!this.gl) throw new Error("WebGL not supported")
 
-    this.NUM_BONES = 5
-    this.SEGMENT_HEIGHT = 1.0
+		this.rotationAngle = 0
 
-    this.vsSource = vertexShader
-    this.fsSource = fragmentShader
+		this._init()
+		this._render = this._render.bind(this)
+		window.addEventListener("resize", () => this._resizeCanvas())
+		requestAnimationFrame(this._render)
+	}
 
-    this._init()
-  }
+	_init() {
+		this._compileShaders()
+		this.gl.useProgram(this.program) // ✅ ensure program is active before accessing uniforms
+		this._getUniformLocations()
+		this._initBuffers()
+		this._resizeCanvas()
+	}
 
-  _init() {
-    const gl = this.gl
+	_compileShaders() {
+		const gl = this.gl
 
-    // Compile shaders & create program
-    const compile = (src, type) => {
-      const shader = gl.createShader(type)
-      gl.shaderSource(shader, src)
-      gl.compileShader(shader)
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        throw new Error(gl.getShaderInfoLog(shader))
-      }
-      return shader
-    }
+		const compile = (src, type) => {
+			const shader = gl.createShader(type)
+			gl.shaderSource(shader, src)
+			gl.compileShader(shader)
+			if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+				throw new Error(gl.getShaderInfoLog(shader))
+			}
+			return shader
+		}
 
-    const vs = compile(this.vsSource, gl.VERTEX_SHADER)
-    const fs = compile(this.fsSource, gl.FRAGMENT_SHADER)
+		const vs = compile(vertexShader, gl.VERTEX_SHADER)
+		const fs = compile(fragmentShader, gl.FRAGMENT_SHADER)
 
-    this.program = gl.createProgram()
-    gl.attachShader(this.program, vs)
-    gl.attachShader(this.program, fs)
-    gl.linkProgram(this.program)
-    if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-      throw new Error(gl.getProgramInfoLog(this.program))
-    }
-    gl.useProgram(this.program)
+		this.program = gl.createProgram()
+		gl.attachShader(this.program, vs)
+		gl.attachShader(this.program, fs)
+		gl.linkProgram(this.program)
 
-    // Create geometry and skin data
-    const cube = this._createBox(this.SEGMENT_HEIGHT)
-    this.bonePositions = []
-    this.skinIndices = []
+		if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+			throw new Error(gl.getProgramInfoLog(this.program))
+		}
+	}
 
-    for (let i = 0; i < this.NUM_BONES; i++) {
-      for (let v = 0; v < cube.length / 3; v++) {
-        this.bonePositions.push(
-          cube[v * 3],
-          cube[v * 3 + 1] + i * this.SEGMENT_HEIGHT,
-          cube[v * 3 + 2]
-        )
-        this.skinIndices.push(i)
-      }
-    }
+	_initBuffers() {
+		const gl = this.gl
 
-    // Setup buffers
-    this._bindAttrib(this.bonePositions, "position", 3)
-    this._bindAttrib(this.skinIndices, "skinIndex", 1, gl.FLOAT)
+		this.vertexBuffer = gl.createBuffer()
+		gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer)
+		gl.bufferData(gl.ARRAY_BUFFER, this._createCubeVertices(), gl.STATIC_DRAW)
 
-    // Uniform locations
-    this.uBones = gl.getUniformLocation(this.program, "boneMatrices[0]")
-    this.uProjection = gl.getUniformLocation(this.program, "projectionMatrix")
-    this.uView = gl.getUniformLocation(this.program, "viewMatrix")
+		this.indexBuffer = gl.createBuffer()
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer)
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this._createCubeIndices(), gl.STATIC_DRAW)
 
-    // Initial resize & set camera uniforms
-    this._resizeCanvas()
+		const positionLoc = gl.getAttribLocation(this.program, "position")
+		gl.enableVertexAttribArray(positionLoc)
+		gl.vertexAttribPointer(positionLoc, 3, gl.FLOAT, false, 0, 0)
+	}
 
-    gl.clearColor(0.0, 0.0, 0.0, 1.0)
+	_getUniformLocations() {
+		const gl = this.gl
+		this.modelMatrixLoc = gl.getUniformLocation(this.program, "modelMatrix")
+		this.viewMatrixLoc = gl.getUniformLocation(this.program, "viewMatrix")
+		this.projectionMatrixLoc = gl.getUniformLocation(this.program, "projectionMatrix")
+	}
 
-    this._render = this._render.bind(this)
-    window.addEventListener("resize", () => this._resizeCanvas())
-    requestAnimationFrame(this._render)
-  }
+	_resizeCanvas() {
+		const canvas = this.canvas
+		const gl = this.gl
 
-  _resizeCanvas() {
-    const gl = this.gl
-    const canvas = this.canvas
+		const w = canvas.clientWidth
+		const h = canvas.clientHeight
 
-    // Scale canvas width/height to clientWidth/clientHeight to match inner dimensions
-    const displayWidth = canvas.clientWidth
-    const displayHeight = canvas.clientHeight
+		if (canvas.width !== w || canvas.height !== h) {
+			canvas.width = w
+			canvas.height = h
+			gl.viewport(0, 0, w, h)
+		}
 
-    if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
-      canvas.width = displayWidth
-      canvas.height = displayHeight
-      gl.viewport(0, 0, canvas.width, canvas.height)
+		gl.useProgram(this.program) // ✅ ensure the program is active
 
-      // Update projection matrix with new aspect ratio
-      const aspect = canvas.width / canvas.height
-      gl.uniformMatrix4fv(
-        this.uProjection,
-        false,
-        this._perspective(Math.PI / 4, aspect, 0.1, 100)
-      )
-      // Keep the view matrix constant or update if necessary
-      gl.uniformMatrix4fv(
-        this.uView,
-        false,
-        this._lookAt([0, 5, 10], [0, 2, 0], [0, 1, 0])
-      )
-    }
-  }
+		const aspect = w / h
+		const proj = this._perspective(Math.PI / 4, aspect, 0.1, 100)
+		gl.uniformMatrix4fv(this.projectionMatrixLoc, false, proj)
 
-  _createBox(height = 1.0, width = 0.2, depth = 0.2) {
-    const w = width / 2,
-      h = height / 2,
-      d = depth / 2
-    return new Float32Array([
-      // Front face
-      -w,
-      -h,
-      d,
-      w,
-      -h,
-      d,
-      w,
-      h,
-      d,
-      -w,
-      -h,
-      d,
-      w,
-      h,
-      d,
-      -w,
-      h,
-      d,
-      // Back face
-      -w,
-      -h,
-      -d,
-      -w,
-      h,
-      -d,
-      w,
-      h,
-      -d,
-      -w,
-      -h,
-      -d,
-      w,
-      h,
-      -d,
-      w,
-      -h,
-      -d,
-      // Top face
-      -w,
-      h,
-      -d,
-      -w,
-      h,
-      d,
-      w,
-      h,
-      d,
-      -w,
-      h,
-      -d,
-      w,
-      h,
-      d,
-      w,
-      h,
-      -d,
-      // Bottom face
-      -w,
-      -h,
-      -d,
-      w,
-      -h,
-      -d,
-      w,
-      -h,
-      d,
-      -w,
-      -h,
-      -d,
-      w,
-      -h,
-      d,
-      -w,
-      -h,
-      d,
-      // Right face
-      w,
-      -h,
-      -d,
-      w,
-      h,
-      -d,
-      w,
-      h,
-      d,
-      w,
-      -h,
-      -d,
-      w,
-      h,
-      d,
-      w,
-      -h,
-      d,
-      // Left face
-      -w,
-      -h,
-      -d,
-      -w,
-      -h,
-      d,
-      -w,
-      h,
-      d,
-      -w,
-      -h,
-      -d,
-      -w,
-      h,
-      d,
-      -w,
-      h,
-      -d,
-    ])
-  }
+		const view = this._lookAt([0, 0, 5], [0, 0, 0], [0, 1, 0])
+		gl.uniformMatrix4fv(this.viewMatrixLoc, false, view)
+	}
 
-  _bindAttrib(data, name, size, type = this.gl.FLOAT) {
-    const gl = this.gl
-    const loc = gl.getAttribLocation(this.program, name)
-    const buf = gl.createBuffer()
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-    const typedData = type === gl.FLOAT ? new Float32Array(data) : new Uint16Array(data)
-    gl.bufferData(gl.ARRAY_BUFFER, typedData, gl.STATIC_DRAW)
-    gl.enableVertexAttribArray(loc)
-    gl.vertexAttribPointer(loc, size, type, false, 0, 0)
-  }
+	_render(t) {
+		this._resizeCanvas()
 
-  // Math helpers omitted for brevity (same as your original code) ...
+		const gl = this.gl
+		gl.useProgram(this.program) // ✅ ensure the program is active
 
-  _perspective(fov, aspect, near, far) {
-    const f = 1.0 / Math.tan(fov / 2),
-      nf = 1 / (near - far)
-    return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0])
-  }
+		this.rotationAngle = t * 0.001
 
-  _lookAt(eye, center, up) {
-    const z = this._normalize(this._sub(eye, center))
-    const x = this._normalize(this._cross(up, z))
-    const y = this._cross(z, x)
-    return new Float32Array([
-      x[0], y[0], z[0], 0,
-      x[1], y[1], z[1], 0,
-      x[2], y[2], z[2], 0,
-      -this._dot(x, eye), -this._dot(y, eye), -this._dot(z, eye), 1,
-    ])
-  }
+		const rx = this._rotateX(this.rotationAngle)
+		const ry = this._rotateY(this.rotationAngle * 0.7)
+		const rz = this._rotateZ(this.rotationAngle * 0.3)
+		const model = this._mat4Multiply(rz, this._mat4Multiply(ry, rx))
 
-  _sub(a, b) {
-    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-  }
+		gl.uniformMatrix4fv(this.modelMatrixLoc, false, model) // ✅ no longer commented
 
-  _cross(a, b) {
-    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
-  }
+		gl.clearColor(0.1, 0.1, 0.1, 1.0)
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+		gl.enable(gl.DEPTH_TEST)
 
-  _dot(a, b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-  }
+		gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0)
+		requestAnimationFrame(this._render)
+	}
 
-  _normalize(v) {
-    const len = Math.sqrt(this._dot(v, v))
-    return v.map((e) => e / len)
-  }
+	_createCubeVertices() {
+		return new Float32Array([
+			// Front
+			-1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1,
+			// Back
+			-1, -1, -1, -1, 1, -1, 1, 1, -1, 1, -1, -1,
+			// Top
+			-1, 1, -1, -1, 1, 1, 1, 1, 1, 1, 1, -1,
+			// Bottom
+			-1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1,
+			// Right
+			1, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1,
+			// Left
+			-1, -1, -1, -1, -1, 1, -1, 1, 1, -1, 1, -1,
+		])
+	}
 
-  _mat4Identity() {
-    return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-  }
+	_createCubeIndices() {
+		return new Uint16Array([
+			0,
+			1,
+			2,
+			0,
+			2,
+			3, // Front
+			4,
+			5,
+			6,
+			4,
+			6,
+			7, // Back
+			8,
+			9,
+			10,
+			8,
+			10,
+			11, // Top
+			12,
+			13,
+			14,
+			12,
+			14,
+			15, // Bottom
+			16,
+			17,
+			18,
+			16,
+			18,
+			19, // Right
+			20,
+			21,
+			22,
+			20,
+			22,
+			23, // Left
+		])
+	}
 
-  _mat4Translate(y) {
-    const m = this._mat4Identity()
-    m[13] = y
-    return m
-  }
+	_perspective(fov, aspect, near, far) {
+		const f = 1.0 / Math.tan(fov / 2)
+		const nf = 1 / (near - far)
+		return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0])
+	}
 
-  _mat4RotateZ(theta) {
-    const c = Math.cos(theta),
-      s = Math.sin(theta)
-    return new Float32Array([c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-  }
+	_lookAt(eye, center, up) {
+		const z = this._normalize(this._sub(eye, center))
+		const x = this._normalize(this._cross(up, z))
+		const y = this._cross(z, x)
+		return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -this._dot(x, eye), -this._dot(y, eye), -this._dot(z, eye), 1])
+	}
 
-  _mat4Mul(a, b) {
-    const out = new Float32Array(16)
-    for (let i = 0; i < 4; ++i) {
-      for (let j = 0; j < 4; ++j) {
-        out[i * 4 + j] = 0
-        for (let k = 0; k < 4; ++k) {
-          out[i * 4 + j] += a[i * 4 + k] * b[k * 4 + j]
-        }
-      }
-    }
-    return out
-  }
+	_sub(a, b) {
+		return a.map((v, i) => v - b[i])
+	}
+	_dot(a, b) {
+		return a.reduce((sum, v, i) => sum + v * b[i], 0)
+	}
+	_cross(a, b) {
+		return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+	}
+	_normalize(v) {
+		const len = Math.hypot(...v)
+		return v.map((x) => x / len)
+	}
 
-  // Animation loop
-  _render(t) {
-    this._resizeCanvas() // Ensure canvas size sync on each frame (optional)
+	_rotateX(a) {
+		const c = Math.cos(a),
+			s = Math.sin(a)
+		return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1])
+	}
+	_rotateY(a) {
+		const c = Math.cos(a),
+			s = Math.sin(a)
+		return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1])
+	}
+	_rotateZ(a) {
+		const c = Math.cos(a),
+			s = Math.sin(a)
+		return new Float32Array([c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+	}
 
-    const gl = this.gl
-    const time = t * 0.001
-    const bones = []
-
-    for (let i = 0; i < this.NUM_BONES; i++) {
-      const rot = this._mat4RotateZ(Math.sin(time + i) * 0.4)
-      const trans = this._mat4Translate(i * this.SEGMENT_HEIGHT)
-      bones.push(this._mat4Mul(trans, rot))
-    }
-
-    const boneArray = new Float32Array(this.NUM_BONES * 16)
-    for (let i = 0; i < this.NUM_BONES; i++) {
-      boneArray.set(bones[i], i * 16)
-    }
-
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-    gl.enable(gl.DEPTH_TEST)
-    gl.uniformMatrix4fv(this.uBones, false, boneArray)
-    gl.drawArrays(gl.TRIANGLES, 0, this.bonePositions.length / 3)
-
-    requestAnimationFrame(this._render)
-  }
+	_mat4Multiply(a, b) {
+		const out = new Float32Array(16)
+		for (let i = 0; i < 4; ++i) {
+			for (let j = 0; j < 4; ++j) {
+				out[i * 4 + j] = a[i * 4 + 0] * b[0 * 4 + j] + a[i * 4 + 1] * b[1 * 4 + j] + a[i * 4 + 2] * b[2 * 4 + j] + a[i * 4 + 3] * b[3 * 4 + j]
+			}
+		}
+		return out
+	}
 }
 
-const engine = new WebGLRenderEngine()
+const cube = new WebGLCube()
