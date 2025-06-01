@@ -2,7 +2,7 @@ import vertexShader from "./vert.glsl"
 import fragmentShader from "./frag.glsl"
 
 class WebGLRenderEngine {
-	constructor(canvasId = "glcanvas") {
+	constructor(canvasId = "scene") {
 		this.canvas = document.getElementById(canvasId)
 		this.gl = this.canvas.getContext("webgl")
 		if (!this.gl) throw new Error("WebGL not supported")
@@ -10,29 +10,8 @@ class WebGLRenderEngine {
 		this.NUM_BONES = 5
 		this.SEGMENT_HEIGHT = 1.0
 
-		// 	this.vsSource = `
-		//   attribute vec3 position;
-		//   attribute float skinIndex;
-
-		//   uniform mat4 boneMatrices[20];
-		//   uniform mat4 projectionMatrix;
-		//   uniform mat4 viewMatrix;
-
-		//   void main() {
-		//     int idx = int(skinIndex);
-		//     vec4 worldPos = boneMatrices[idx] * vec4(position, 1.0);
-		//     gl_Position = projectionMatrix * viewMatrix * worldPos;
-		//   }
-		// `
 		this.vsSource = vertexShader
 		this.fsSource = fragmentShader
-
-		// 	this.fsSource = `
-		//   precision mediump float;
-		//   void main() {
-		//     gl_FragColor = vec4(0.4, 0.8, 1.0, 1.0);
-		//   }
-		// `
 
 		this._init()
 	}
