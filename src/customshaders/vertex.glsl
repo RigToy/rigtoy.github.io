@@ -39,7 +39,7 @@ float max3(const in vec3 v) {
 	return max(max(v.x, v.y), v.z);
 }
 float average(const in vec3 v) {
-	return dot(v, vec3(0.3333333f));
+	return dot(v, vec3(0.3333333));
 }
 
 // expects values in the range of [0,1]x[0,1], returns values in the [0,1] range.
