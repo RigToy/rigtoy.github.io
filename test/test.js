@@ -1,5 +1,7 @@
-import vertexShader from "./vert.glsl"
-import fragmentShader from "./frag.glsl"
+// import vertexShader from "./vert.glsl"
+// import fragmentShader from "./frag.glsl"
+import vertexShader from "./vertex_full.glsl"
+import fragmentShader from "./fragment_full.glsl"
 
 class WebGLCube {
 	constructor(canvasId = "scene") {
